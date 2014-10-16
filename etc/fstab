@@ -1,0 +1,2 @@
+none	/mnt/ramfs	ramfs	defaults	0
+//<hostname>/nvmtrace	/mnt/nvmtrace	cifs	defaults,username=nvmtrace,password=<password>

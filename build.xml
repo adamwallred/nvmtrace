@@ -1,0 +1,50 @@
+<project name="nvmtrace" default="dist" basedir=".">
+    <description>
+        nvmtrace
+    </description>
+  <!-- set global properties for this build -->
+  <property name="src" location="src"/>
+  <property name="bin" location="bin"/>
+  <property name="lib"  location="lib"/>
+  <property name="dist"  location="dist"/>
+  
+  <target name="init">
+    <!-- Create the time stamp -->
+    <tstamp/>
+    <!-- Create the build directory structure used by compile -->
+    <mkdir dir="${bin}"/>
+    <mkdir dir="${dist}"/>
+  </target>
+
+  <target name="compile" depends="clean,init"
+        description="compile the source " >
+    <!-- Compile the java code from ${src} into ${bin} -->
+    <javac srcdir="${src}" destdir="${bin}" includeantruntime="false">
+      <classpath>
+        <pathelement path="${classpath}"/>
+	<pathelement location="lib/postgresql.jar"/>
+      </classpath> 
+    </javac>
+  </target>
+
+  <target name="dist" depends="compile"
+	description="generate the distribution" >
+    <exec command="sh -c 'cd bin; jar -xf ${lib}/postgresql.jar'"/>
+     <jar jarfile="${dist}/nvmtrace.jar">
+      <fileset dir="${bin}">
+        <include name="**/*.class"/>
+      </fileset>
+      <manifest>
+	<attribute name="Main-Class"
+	     value="edu.gatech.nvmtrace.NVMController"/>
+      </manifest>
+    </jar>
+  </target>
+
+  <target name="clean"
+        description="clean up" >
+    <!-- Delete the ${build} and ${dist} directory trees -->
+    <delete dir="${dist}"/>
+    <delete dir="${bin}"/>
+  </target>
+</project>

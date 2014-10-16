@@ -1,0 +1,281 @@
+NVMTRACE CLUSTER ASSEMBLY/CONFIGURATION 0.2
+
+DESCRIPTION
+
+NVMTrace is the implementation of a software controller that facilitates
+automated baremetal malware analysis. It uses open-source software and
+freely available technologies to operate one or more baremetal malware
+analysis clusters, each of which comprises one Linux host, eight baremetal
+processing nodes, and a network switch.
+
+NVMTRACE HARDWARE
+
+NVMTrace requires a cluster of machines on which to run. Begin by
+purchasing the following hardware:
+
+1 x SuperMicro 5016I-MTF (the Linux Host)
+  2 x 4GB RAM (e.g.,Kingston KVR1333D3D8R9S/4G)
+  4 x 7200 RPM Hard Disk Drives
+  1 x Dual-port Gigabit NIC (e.g., Intel E1G42ET)
+
+8 x SuperMicro 5015A-PHF (the Baremetal Nodes)
+  1 x 1GB RAM (e.g., Corsair VS1GSDS667D2)
+  1 x 2GB Write-protectable USB Stick (e.g., Imation 18405)
+
+1 x Cisco WS-C2960-24TC-S
+
+Record the MAC address of each SuperMicro 5015A-PHF's pair of gigabit
+network interfaces (e.g., leftmost interface MAC address, rightmost
+interface MAC address).
+
+BAREMETAL NODE CONFIGURATION
+
+Temporarily connect a hard drive to a SuperMicro 5015A-PHF and install
+Windows XP on the system. Installation will require setting IDE mode in
+the BIOS for modern SATA HDDs. As this installation will be turned into
+a file that will reside in memory, keep the partition size small (e.g., 
+2GB) and use the NTFS file system. In addition to standard Windows drivers
+for the SuperMicro 5015A-PHF, download and install the Windows XP iSCSI
+Initiator 2.08 boot-capable version linked off of
+http://www.etherboot.org/wiki/sanboot/winnt_iscsi .
+
+During Windows XP iSCSI Initiator installation, uncheck Microsoft MPIO
+Multipathing Support for iSCSI. Then, install the SAN Boot configuration
+driver 1.1.1 for Windows, which can be downloaded at
+https://git.ipxe.org/release/sanbootconf/sanbootconf-1.1.1.zip . Then,
+run the Microsoft iSCSI Initiator tool located in the Control Panel. In
+the General tab, modify the Initiator Node Name to be 
+"iqn.2000-09.org.etherboot:unknown" (without quotes).
+
+After finishing driver configuration, create a small batch script that runs
+every time Windows starts. This script should ensure that the system has a
+DHCP lease (e.g., ipconfig /renew), synchronize time with a network
+resource (e.g., net time /set /y against a Samba server running on the
+Linux host), and then execute artifact.exe off the Windows root directory
+(e.g., %SYSTEMDRIVE%\artifact.exe). This file will be placed in that
+location by the NVMTrace software after it assembles the copy-on-write
+block device for the baremetal node's sample processing session.
+
+For performance reasons, disable the page file to ensure paging over the
+network does not occur.
+
+When finished with baremetal node installation and software configuration,
+remove the hard drive from the SuperMicro 5015A-PHF and use dd to acquire a
+file representation of the disk, which should include both the first 512
+byte sector (containing the partition table and MBR) and the Windows XP
+partition.
+
+For each baremetal node, use the BIOS to configure IPMI. IP Address Source
+should be set to Static, Subnet Mask should be set to 255.255.255.0, and
+Gateway Address should be set to 0.0.0.0. The first baremetal node's IP
+Address should be set to 10.10.80.200 and incremented accordingly (e.g.,
+10.10.80.201 for the second node, 10.10.80.202 for the third node). After
+configuring IPMI on a given baremetal node, temporarily connect the
+leftmost network interface of that system to a computer running Linux and
+use IPMIView to change the IPMI password. The same IPMI password should be
+set for each baremetal node. Label each baremetal node according to the
+assignments made above:
+
+10.10.80.200 - alpha
+10.10.80.201 - beta
+10.10.80.202 - delta
+10.10.80.203 - epsilon
+10.10.80.204 - iota
+10.10.80.205 - kappa
+10.10.80.206 - lambda
+10.10.80.207 - mu
+
+Finally, flash each USB stick with the gpxe.usb file included with the
+NVMTrace source, make the stick write protected, and (via the BIOS)
+configure each baremetal node to boot off of USB.
+
+LINUX HOST CONFIGURATION
+
+Assemble the Linux host's hardware, then install Debian 7 "Wheezy". During
+installation, create a small software RAID-1 /boot, a 32GB+ RAID-10 /, and
+a RAID-10 LVM volume group at least eight times the size of the baremetal
+node disk image.
+
+After installation, create eight logical volumes that are each the same
+size as the baremetal node disk image. They should be named as follows:
+
+alpha-writes
+beta-writes
+delta-writes
+epsilon-writes
+iota-writes
+kappa-writes
+lambda-writes
+mu-writes
+
+Edit /etc/udev/rules.d/70-persistent-net.rules to:
+
+1) Rename the leftmost interface on the dual-port gigabit NIC to
+   nvm-storage.
+2) Rename the rightmost interface on the dual-port gigabit NIC to nvm-nat.
+
+Edit the dhcpd.conf template file provided with the NVMTrace source to
+set the MAC addresses specific to the baremetal nodes. As an example, for
+the following entry:
+
+host alpha-storage {
+  hardware ethernet <alpha_storage_iface_mac>;
+  fixed-address 10.10.80.100;
+  filename "";
+  option  root-path "iscsi:10.10.80.1::::iqn.1970-01.nvmtrace.alpha";
+}
+
+change <alpha_storage_iface_mac> to the MAC address of the alpha-labeled
+baremetal node's leftmost interface. Similarly, for the following entry:
+
+host alpha-nat {
+  hardware ethernet <alpha_nat_iface_mac>;
+  fixed-address 192.168.90.100;
+}
+
+change <alpha_nat_iface_mac> to the MAC address of the alpha-labeled
+baremetal node's rightmost interface. Install the isc-dhcp-server package,
+then replace /etc/dhcp/dhcpd.conf with the completed dhcpd.conf template.
+
+Edit the interfaces template file provided with the NVMTrace source to
+set the address, netmask, and gateway of the interface through which
+traffic from the NAT VLAN will be routed. After editing, replace
+/etc/network/interfaces with the completed interfaces template.
+
+Edit the iptables template file provided with the NVMTrace source to set
+the spamtrap_ip and and host_egress_ip. The spamtrap_ip should represent a
+host that acts as a mail blackhole for unsolicited email generated by
+malware running on the baremetal nodes. If desired, the GTISC public
+spamtrap, which operates at 143.215.130.30, may be used. The host_egress_ip
+should be the address set in the interfaces template. After editing,
+copy the completed iptables template to /etc/network/iptables .
+
+Edit /etc/sysctl.conf and set net.ipv4.ip_forward=1 to enable
+forwarding of NAT’d baremetal node traffic.
+
+Edit the fstab template file provided with the NVMTrace source. If only
+one NVMTrace cluster will be used, remove the CIFS mount line. If multiple
+clusters will be used, the input directory should hosted be via a central
+resource that each Linux controller can access. After editing, append the
+completed fstab template to /etc/fstab. Finally, create the /mnt/ramfs
+directory utilized in the fstab template.
+
+If only one NVMTrace cluster will be used, install the postgresql-9.1
+package, create an nvmtrace user and database, then import the
+nvmtrace.sql provided with the NVMTrace source. If multiple clusters will
+be used, the database should be hosted via a central resource accessible
+to each Linux controller.
+
+SWITCH CONFIGURATION
+
+Configure the Cisco switch as follows (VLAN numbers may be modified as
+needed):
+
+1) Assign the first (leftmost) block of 12 10/100 switch ports to VLAN 80,
+   hereafter referred to as the "Storage VLAN".
+2) Assign the second (rightmost) block of 12 10/100 switch ports to
+   VLAN 90, hereafter referred to as the "NAT VLAN".
+3) Enable switchport protected mode for all 10/100 ports.
+4) Assign the first (leftmost) gigabit switch port to the Storage VLAN.
+5) Assign the second (rightmost) gigabit switch port to the NAT VLAN.
+
+Connect the leftmost interface of each baremetal node to a switch port
+assigned to the Storage VLAN, and connect the rightmost interface of each
+baremetal node to a switch port assigned to the NAT VLAN. Connect the
+leftmost interface on the dual-port gigabit NIC in the Linux host to the
+gigabit switch port assigned to the Storage VLAN, and the rightmost
+interface on the dual-port gigabit NIC in Linux host to the gigabit switch
+port assigned to the NAT VLAN.
+
+SOFTWARE CONFIGURATION
+
+Create the following directory hierarchy on the Linux host:
+
+/opt/gtisc
+/opt/gtisc/etc
+/opt/gtisc/bin
+/opt/gtisc/tmp
+/opt/gtisc/lib
+/opt/gtisc/lib/java
+/opt/gtisc/nvmtrace
+/mnt/disks
+
+Echo the IPMI password for the baremetal nodes into
+/opt/gtisc/etc/nvm.ipmi.passwd. Copy the nvm.iscsi.initiatoriqn file 
+included with the NVMTrace source to /opt/gtisc/etc. Echo the IP address
+and port number (colon separated, on the same line) of the controller node
+nvm-storage interface and iSCSI service port to
+/opt/gtisc/etc/nvm.iscsi.ipport (the default iSCSI port is 3260).
+
+Copy the baremetal node disk image file to /opt/gtisc/lib/nvmtrace.img. Copy
+the nvmtrace.cfg file included with the NVMTrace source to
+/opt/gtisc/etc/nvmtrace.cfg. Copy the nvmtrace.sh file included with the
+NVMTrace source to /opt/gtisc/bin. If only one cluster will be used,
+create the following directory:
+
+/opt/gtisc/nvmtrace/input
+
+and remove the following lines from the nvmtrace.sh script:
+
+NVMT_MTD=`mount | grep /mnt/nvmtrace | wc -l`
+
+if [ $NVMT_MTD -eq "0" ]; then
+  mount /mnt/nvmtrace
+fi;
+
+If multiple clusters will be used, create a symlink that points input in
+/opt/gtisc/nvmtrace/ to /mnt/nvmtrace/input.
+
+Install the following packages:
+
+ant
+psmisc
+tcpdump
+ipmitool
+kpartx
+conntrack
+openjdk-6-jdk
+targetcli
+samba
+ntfs-3g
+cifs-utils
+
+Extract the contents of the workspaces.tar.gz file provided with the
+NVMTrace source to /opt/gtisc/nvmtrace. For each baremetal node workspace,
+edit cfg/mac to insert the MAC address specific to that baremetal node's
+NAT VLAN interface.
+
+Using losetup, attach nvmtrace.img to /dev/loop0 and use blockdev
+--getsize /dev/loop0 to get the baremetal node disk image's size. Detach
+the image using losetup. Edit cfg/dmtable for each workspace and replace
+<cow_read_size> with this value. Similarly, replace <write_lv_path> with
+the path of the logical volume specific to each workspace. For example,
+if the volume group on which the alpha-write logical volume resides is
+named vg, replace <alpha_write_lv_path> with /dev/vg/alpha-writes.
+
+Create a simple loader utility that does the following:
+
+1) Takes as input a directory of samples to be loaded;
+2) Renames each sample according to its MD5 value;
+3) Queries the database to see if the sample has already been loaded. If
+   the sample (based on its MD5 value) has not yet been loaded it is copied
+   to /opt/gtisc/nvmtrace/input and an entry with a NULL process_date and
+   appropriate submit_time value (when the sample was collected, represented
+   as a Unix epoch) is inserted into the database. If the sample is already
+   present, no insertion is performed.
+
+Edit the NVMThreadDB.java source file to set the appropriate database
+connection information (dbHost, dbUser, dbName, dbPass). If desired, edit
+the NVMCThread.java source file to change the default execution timeout
+(nvmRunTime).
+
+Add code to the analyzeSessionArtifacts() method of the NVMCThread.java
+source file to perform whatever network analysis (e.g., DNS lookups, HTTP
+requests, SMTP activity) and disk analysis (e.g., files created or
+deleted, registry entries added or modified) is desired. Build the NVMTrace
+controller software by entering into the nvmtrace source directory and
+typing ant. Copy the nvmtrace.jar file to
+/opt/gtisc/lib/java/nvmtrace.jar. To run NVMTrace, run
+/opt/gtisc/bin/nvmtrace.sh as root. To stop NVMTrace, type killall java.
+When the NVMTrace controller receives SIG_TERM, a shutdown handler will
+gracefully stop sample processing.

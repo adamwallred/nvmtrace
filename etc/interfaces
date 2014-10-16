@@ -1,0 +1,25 @@
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+# The primary network interface
+
+auto eth1
+iface eth1 inet static
+	address <address>
+	netmask <netmask>
+	gateway <gateway>
+	pre-up iptables-restore < /etc/network/iptables
+
+auto nvm-storage
+iface nvm-storage inet static
+	address 10.10.80.1
+	netmask 255.255.255.0
+
+auto nvm-nat
+iface nvm-nat inet static
+	address 192.168.90.1
+	netmask 255.255.255.0

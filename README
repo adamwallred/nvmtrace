@@ -1,0 +1,13 @@
+NVMTRACE 0.2 README
+
+DESCRIPTION
+
+NVMTrace is the implementation of a software controller that
+facilitates automated baremetal malware analysis. It uses open-source
+software and freely available technologies to operate one or more
+baremetal malware analysis clusters, each of which comprises one Linux
+host, eight baremetal processing nodes, and a network switch.
+
+NVMTRACE CLUSTER ASSEMBLY/CONFIGURATION
+
+Please see INSTALL for detailed assembly and configuration instructions.
